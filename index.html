@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三视图体素建模编辑器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23131a27'/%3E%3Cpath%20d='M8%2010l8-5%208%205v12l-8%205-8-5z'%20fill='%2316a34a'/%3E%3Cpath%20d='M8%2010l8%205%208-5M16%2015v12'%20stroke='%230d2f1f'%20stroke-width='1.5'%20fill='none'/%3E%3C/svg%3E">
+<style>
+:root{
+  --green:#16a34a;
+  --green-deep:#11793a;
+  --warn:#b9f3d1;
+  --warn-deep:#94e8bd;
+  --ink:#1d2430;
+  --ink-2:#556070;
+  --ink-3:#7a8595;
+  --line:#d4dce6;
+  --panel:#e9eef5;
+  --cell-off:#ccd3dc;
+  --cell-off-hover:#b3bdc9;
+  --vp-bg:#121826;
+  --vp-line:#232f44;
+  --accent:#2f6bff;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  font-family:"SF Pro SC","SF Pro Text","PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans CJK SC",system-ui,-apple-system,sans-serif;
+  color:var(--ink);
+  background:var(--vp-bg);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;}
+button:focus-visible,select:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;
+}
+#app{display:flex;height:100vh;}
+
+/* 左右衔接渐变带：从编辑栏浅色平滑过渡到视口深色，保证基调一致、衔接流畅 */
+.divider{
+  flex:none;width:14px;position:relative;z-index:3;
+  background:linear-gradient(to right,var(--panel) 0%,#cdd6e1 35%,var(--vp-bg) 100%);
+}
+.divider::after{
+  content:'';position:absolute;right:0;top:0;bottom:0;width:1px;
+  background:rgba(255,255,255,.05);
+}
+/* 收起 / 展开编辑栏的箭头按钮：中心位于分割带内侧边缘，收起时完整露在屏幕内 */
+.collapse-btn{
+  position:absolute;top:50%;left:100%;transform:translate(-50%,-50%);
+  width:26px;height:26px;border-radius:50%;padding:0;
+  background:var(--vp-bg);border:1px solid rgba(255,255,255,.16);
+  color:#cfe0f5;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+  transition:background .12s,transform .18s,color .12s;
+}
+.collapse-btn:hover{background:#1c2940;color:#fff;transform:translate(-50%,-50%) scale(1.1);}
+.collapse-btn:active{transform:translate(-50%,-50%) scale(.96);}
+
+/* ===================== 左侧编辑栏 ===================== */
+#panel{
+  width:25%;min-width:300px;max-width:420px;
+  height:100%;
+  overflow-y:auto;
+  background-color:var(--panel);
+  background-image:radial-gradient(circle at 1px 1px,rgba(38,52,78,.06) 1px,transparent 1.6px);
+  background-size:18px 18px;
+  border-right:1px solid #c9d2de;
+  padding:12px 14px 10px;
+  display:flex;flex-direction:column;gap:5px;
+  scrollbar-width:thin;scrollbar-color:#c3ccd8 transparent;
+  transition:width .3s cubic-bezier(.4,0,.2,1),min-width .3s cubic-bezier(.4,0,.2,1),max-width .3s cubic-bezier(.4,0,.2,1),padding .3s cubic-bezier(.4,0,.2,1),border-color .3s;
+}
+#panel.collapsed{
+  width:0;min-width:0;max-width:0;padding:0;border-right-color:transparent;overflow:hidden;
+}
+#panel::-webkit-scrollbar{width:8px;}
+#panel::-webkit-scrollbar-thumb{background:#c3ccd8;border-radius:4px;}
+
+.brand{display:flex;gap:8px;align-items:center;padding:0 2px 2px;}
+.brand svg{flex:none;}
+.brand h1{font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1.2;}
+
+.controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.field{display:flex;align-items:center;gap:5px;}
+.field label{font-size:10.5px;color:var(--ink-2);font-weight:500;}
+.field select{
+  height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;
+  padding:0 7px;font-size:11.5px;color:var(--ink);cursor:pointer;
+}
+.tbtn{
+  height:28px;padding:0 8px;border-radius:7px;border:1px solid var(--line);
+  background:#fff;color:var(--ink);cursor:pointer;font-size:11.5px;white-space:nowrap;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.tbtn:hover{background:#f6f9fc;border-color:#9fb4cc;}
+.tbtn:active{transform:translateY(1px);}
+.tbtn.danger:hover{color:#b3261e;border-color:#e0a9a4;background:#fdf6f5;}
+
+.stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:3px;
+  background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px 5px;
+}
+.stat{display:flex;flex-direction:column;gap:0;text-align:center;}
+.stat .k{font-size:9px;color:var(--ink-3);}
+.stat b{font-size:12px;font-variant-numeric:tabular-nums;font-weight:700;}
+.stat b.on{color:var(--green);}
+.stat-vox b{color:var(--green-deep);}
+
+/* 视图卡片 */
+.view-card{position:relative;background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 9px 7px;}
+/* 引导态：空态时高亮提示第一个视图 */
+.view-card.guide{
+  border-color:var(--green);
+  animation:cardPulse 2.2s ease-in-out infinite;
+}
+@keyframes cardPulse{
+  0%,100%{box-shadow:0 0 0 2px rgba(22,163,74,.4),0 0 14px rgba(22,163,74,.22);}
+  50%{box-shadow:0 0 0 3px rgba(22,163,74,.68),0 0 24px rgba(22,163,74,.42);}
+}
+.guide-tag{
+  position:absolute;top:-9px;right:12px;z-index:3;
+  background:var(--green);color:#fff;font-size:10.5px;font-weight:600;
+  padding:2px 9px;border-radius:10px;
+  box-shadow:0 2px 8px rgba(22,163,74,.45);
+  animation:tagIn .3s ease;
+}
+@keyframes tagIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+.cell.guide-cell{
+  background:rgba(22,163,74,.42);
+  animation:cellPulse 1.5s ease-in-out infinite;
+}
+.cell.guide-cell:hover{background:rgba(22,163,74,.68);}
+@keyframes cellPulse{
+  0%,100%{background:rgba(22,163,74,.3);}
+  50%{background:rgba(22,163,74,.62);}
+}
+.vc-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:5px;}
+.vc-head h2{font-size:12px;font-weight:700;}
+.vc-head .hint{font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.grid-wrap{position:relative;padding:4px;display:flex;justify-content:center;}
+.grid{
+  display:grid;gap:2px;width:min(100%,188px);position:relative;flex:none;
+}
+.cell{
+  aspect-ratio:1/1;border:none;border-radius:3px;background:var(--cell-off);
+  cursor:default;padding:0;display:block;
+  transition:background .1s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+.cell.on{background:var(--green);box-shadow:inset 0 -2px 0 rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.22);}
+.axis{
+  position:absolute;font-size:9.5px;color:var(--ink-3);font-weight:600;
+  letter-spacing:.05em;user-select:none;pointer-events:none;
+  background:rgba(255,255,255,.82);padding:1px 3px;border-radius:3px;
+}
+.axis-tl{top:0;left:0;}
+.axis-br{bottom:0;right:0;}
+
+.legend{font-size:10.5px;color:var(--ink-2);line-height:1.3;}
+.legend .dots{display:flex;align-items:center;gap:10px;}
+.dot{width:10px;height:10px;border-radius:2.5px;display:inline-block;vertical-align:-1px;margin-right:4px;}
+.dot.off{background:var(--cell-off);}
+.dot.on{background:var(--green);}
+
+/* ===================== 右侧 3D 视口 ===================== */
+#viewport{position:relative;flex:1;min-width:0;height:100%;background:var(--vp-bg);}
+#viewport canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+
+.v-loading{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;color:#93a1b8;font-size:13px;z-index:3;background:var(--vp-bg);
+}
+.v-loading.hidden{display:none;}
+.spinner{
+  width:26px;height:26px;border-radius:50%;
+  border:3px solid rgba(147,161,184,.25);border-top-color:#93a1b8;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.v-loading.err .spinner{display:none;}
+.v-loading.err p{color:#e0a9a4;max-width:280px;text-align:center;line-height:1.6;}
+.retry-btn{
+  margin-top:6px;height:30px;padding:0 16px;border-radius:7px;
+  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);
+  color:#e4ebf5;font-size:13px;cursor:pointer;
+  transition:background .12s;
+}
+.retry-btn:hover{background:rgba(255,255,255,.18);}
+
+.v-toolbar{
+  position:absolute;top:14px;right:14px;z-index:5;
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+}
+.v-group{
+  display:flex;gap:3px;align-items:center;
+  background:rgba(18,26,39,.8);border:1px solid rgba(255,255,255,.09);
+  border-radius:9px;padding:4px;
+}
+.vbtn{
+  height:28px;min-width:30px;padding:0 8px;border:none;border-radius:6px;
+  background:transparent;color:#b9c4d6;font-size:12px;cursor:pointer;
+  transition:background .12s,color .12s;
+  font-variant-numeric:tabular-nums;
+}
+.vbtn:hover{background:rgba(255,255,255,.08);color:#fff;}
+.vbtn.active{background:var(--green);color:#fff;}
+.vbtn.active:hover{background:var(--green-deep);}
+.vsep{width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;}
+.vzoom{min-width:28px;padding:0 6px;font-size:14px;}
+
+.palette{display:flex;gap:5px;align-items:center;padding:5px 7px;}
+.swatch{
+  width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;
+  transition:transform .12s,border-color .12s;
+}
+.swatch:hover{transform:scale(1.12);}
+.swatch.active{border-color:#fff;box-shadow:0 0 0 1.5px rgba(255,255,255,.35);}
+
+.v-status{
+  position:absolute;left:14px;bottom:12px;z-index:5;
+  font-size:12px;color:#9fb0c8;background:rgba(18,26,39,.8);
+  border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:6px 10px;
+  font-variant-numeric:tabular-nums;
+}
+.v-status b{color:#fff;font-weight:600;}
+.v-tip{
+  position:absolute;right:14px;bottom:12px;z-index:5;
+  font-size:11px;color:#6d7c94;
+}
+.v-notice{
+  position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:5;
+  max-width:72%;padding:7px 13px;border-radius:8px;font-size:12px;line-height:1.55;
+  display:none;text-align:center;border:1px solid;
+  box-shadow:0 2px 10px rgba(0,0,0,.28);
+}
+.v-notice.show{display:block;animation:noticeIn .2s ease;}
+@keyframes noticeIn{from{opacity:0;transform:translateX(-50%) translateY(4px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+.v-notice.info{background:rgba(226,240,255,.94);color:#1c4e8c;border-color:#bcd8f5;}
+.v-notice.warn{background:rgba(255,244,214,.95);color:#7a5a12;border-color:#ecd9a0;}
+.v-notice.err{background:rgba(255,228,225,.96);color:#a3342c;border-color:#f0b9b4;}
+
+/* ===================== 响应式 ===================== */
+@media (max-width:900px){
+  body{overflow:auto;}
+  #app{flex-direction:column;height:auto;min-height:100vh;}
+  .divider{width:100%;height:26px;background:linear-gradient(to bottom,var(--panel) 0%,#cdd6e1 35%,var(--vp-bg) 100%);}
+  .divider::after{display:none;}
+  #panel{width:100%;max-width:none;height:auto;max-height:52vh;border-right:none;border-bottom:1px solid #cfd7e1;
+    transition:height .3s cubic-bezier(.4,0,.2,1),max-height .3s cubic-bezier(.4,0,.2,1),padding .3s cubic-bezier(.4,0,.2,1),min-height .3s;}
+  #panel.collapsed{height:0;max-height:0;min-height:0;padding:0;border-bottom-color:transparent;}
+  #viewport{flex:1;height:auto;min-height:380px;}
+  .collapse-btn{left:50%;}
+  .v-tip{display:none;}
+  .vc-head .hint{font-size:11.5px;}
+  .axis{font-size:10.5px;}
+  .legend{font-size:12px;}
+  .rule{font-size:11.5px;}
+  .stat .k{font-size:10.5px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .cell{transition:none;}
+  .spinner{animation-duration:1.6s;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== 左侧编辑栏 ===== -->
+  <aside id="panel">
+    <header class="brand">
+      <svg width="26" height="26" viewBox="0 0 34 34" aria-hidden="true">
+        <rect x="1" y="1" width="32" height="32" rx="8" fill="#1d2430"/>
+        <path d="M9 11.5 17 7l8 4.5V24L17 28.5 9 24z" fill="#16a34a"/>
+        <path d="M9 11.5l8 4.5 8-4.5M17 16v12.5" stroke="#0d2f1f" stroke-width="1.6" fill="none"/>
+      </svg>
+      <div>
+        <h1>体素建模</h1>
+      </div>
+    </header>
+
+    <div class="controls">
+      <div class="field">
+        <label for="sizeSel">网格尺寸</label>
+        <select id="sizeSel">
+          <option value="6">6 × 6</option>
+          <option value="8">8 × 8</option>
+          <option value="10" selected>10 × 10</option>
+          <option value="12">12 × 12</option>
+          <option value="14">14 × 14</option>
+          <option value="16">16 × 16</option>
+        </select>
+      </div>
+      <button class="tbtn danger" id="btnClear" type="button">清空全部</button>
+      <button class="tbtn" id="btnHouse" type="button">示例 · 小屋</button>
+      <button class="tbtn" id="btnRocket" type="button">示例 · 火箭</button>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat"><span class="k">正视图</span><b id="stFront">0</b></div>
+      <div class="stat"><span class="k">侧视图</span><b id="stSide">0</b></div>
+      <div class="stat"><span class="k">顶视图</span><b id="stTop">0</b></div>
+      <div class="stat stat-vox"><span class="k">模型体素</span><b id="stVox">0</b></div>
+    </div>
+
+    <section class="view-card">
+      <div class="vc-head"><h2>正视图</h2><span class="hint">横轴 X → · 纵轴 Y ↑</span></div>
+      <div class="grid-wrap">
+        <div class="grid" id="gridFront" aria-label="正视图网格">
+          <span class="axis axis-tl">Y↑</span><span class="axis axis-br">X→</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="view-card">
+      <div class="vc-head"><h2>侧视图</h2><span class="hint">横轴 Z → · 纵轴 Y ↑</span></div>
+      <div class="grid-wrap">
+        <div class="grid" id="gridSide" aria-label="侧视图网格">
+          <span class="axis axis-tl">Y↑</span><span class="axis axis-br">Z→</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="view-card">
+      <div class="vc-head"><h2>顶视图</h2><span class="hint">横轴 X → · 纵轴 Z ↓</span></div>
+      <div class="grid-wrap">
+        <div class="grid" id="gridTop" aria-label="顶视图网格">
+          <span class="axis axis-tl">Z↓</span><span class="axis axis-br">X→</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="legend">
+      <div class="dots">
+        <span><span class="dot off"></span>空白</span>
+        <span><span class="dot on"></span>已填充</span>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- 左右衔接渐变带：从编辑栏浅色平滑过渡到视口深色，保证基调一致、衔接流畅 -->
+  <div class="divider">
+    <button id="collapseBtn" class="collapse-btn" type="button" aria-label="收起编辑栏" title="收起 / 展开编辑栏" aria-pressed="false">
+      <svg class="icon-left" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      <svg class="icon-right" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+  </div>
+
+  <!-- ===== 右侧 3D 视口 ===== -->
+  <main id="viewport">
+    <canvas id="scene"></canvas>
+
+    <div class="v-loading" id="vLoading">
+      <div class="spinner"></div>
+      <p id="loadText">正在加载 3D 引擎…</p>
+    </div>
+
+    <div class="v-toolbar">
+      <div class="v-group" id="viewBtns">
+        <button class="vbtn active" data-view="iso" type="button">等轴测</button>
+        <span class="vsep"></span>
+        <button class="vbtn" data-view="front" type="button">前</button>
+        <button class="vbtn" data-view="back" type="button">后</button>
+        <button class="vbtn" data-view="left" type="button">左</button>
+        <button class="vbtn" data-view="right" type="button">右</button>
+        <span class="vsep"></span>
+        <button class="vbtn" data-view="top" type="button">顶</button>
+        <button class="vbtn" data-view="bottom" type="button">底</button>
+      </div>
+      <div class="v-group">
+        <button class="vbtn vzoom" id="btnZoomIn" type="button" title="放大">+</button>
+        <button class="vbtn vzoom" id="btnZoomOut" type="button" title="缩小">−</button>
+        <span class="vsep"></span>
+        <button class="vbtn" id="btnReset" type="button" title="回到等轴测">复位</button>
+      </div>
+      <div class="v-group">
+        <button class="vbtn" id="btnRotate" type="button" aria-pressed="false">自动旋转</button>
+        <button class="vbtn" id="btnGrid" type="button" aria-pressed="true">网格</button>
+        <button class="vbtn" id="btnEdges" type="button" aria-pressed="true">描边</button>
+      </div>
+      <div class="v-group palette" id="palette" title="体素颜色"></div>
+    </div>
+
+    <div class="v-status"><span id="vViewName">等轴测</span> · <b id="vVox">0</b> 个体素</div>
+    <div class="v-tip">拖动旋转 · 滚轮缩放 · 右键平移 · 拖底部方块入网格建模 · 拖模型方块至垃圾桶删除</div>
+    <div class="v-notice" id="vNotice" role="status" aria-live="polite"></div>
+  </main>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ================= 常量与状态 ================= */
+var SIZE_OPTIONS=[6,8,10,12,14,16];
+var LS_KEY='voxel3d-editor-v1';
+var PALETTE=[
+  {name:'绿',hex:0x16a34a},
+  {name:'蓝',hex:0x2f6bff},
+  {name:'橙',hex:0xe2703a},
+  {name:'紫',hex:0x7c5cff},
+  {name:'青',hex:0x0e9f9f}
+];
+var N=10, color=0x16a34a;
+var front=[], side=[], topGrid=[];
+var voxelSet=[];   /* 权威体素集合：右侧自由建模直接增删，左侧三视图为其投影 */
+var voxelCount=0;
+
+/* three 对象引用 */
+var scene,camera,renderer,controls,voxelGroup,gridHelper;
+var bodyMat,edgeMat,boxGeo,voxelInst,edgeInsts;
+var flightId=0, currentView='iso';
+var reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+var $=function(id){return document.getElementById(id);};
+
+/* ================= 三视图数据 =================
+   每个视图存 [row][col] 布尔数组，row0 为网格顶行。
+   映射：正视图 col→X,row→Y(N-1-row) | 侧视图 col→Z,row→Y | 顶视图 col→X,row→Z
+*/
+function emptyGrid(){return Array.from({length:N},function(){return Array(N).fill(false);});}
+
+/* 三视图投影：把权威体素集合投影到正 / 侧 / 顶三张矩阵（左侧只读显示） */
+function updateProjection(){
+  front=emptyGrid(); side=emptyGrid(); topGrid=emptyGrid();
+  for(var i=0;i<voxelSet.length;i++){
+    var v=voxelSet[i];
+    front[N-1-v[1]][v[0]]=true;   /* 正视图：col→X, row→Y */
+    side[N-1-v[1]][v[2]]=true;    /* 侧视图：col→Z, row→Y */
+    topGrid[v[2]][v[0]]=true;     /* 顶视图：col→X, row→Z */
+  }
+}
+
+/* 建模状态提示：空模型引导拖入方块，有模型则不打扰 */
+function analyzeViews(){
+  if(!voxelSet.length){
+    return {level:'info',msg:'尚未建模：从右侧方块库拖入方块开始搭建，左侧三视图自动显示实时投影；也可点「示例」直接载入模型。'};
+  }
+  return null;
+}
+
+function updateNotice(){
+  var el=$('vNotice');
+  var r=analyzeViews();
+  if(!r&&faceHls.length){
+    var ns=[];
+    for(var f=0;f<faceHls.length;f++){
+      var fm=FACE_MAP[faceHls[f]];
+      if(fm) ns.push(fm.name);
+    }
+    r={level:'info',msg:'已高亮：'+ns.join('、')+'。各方向颜色可叠加保留，再次点击对应方向的面可移除该方向颜色。'};
+  }
+  if(!r){ el.className='v-notice'; return; }
+  el.className='v-notice show '+r.level;
+  el.textContent=r.msg;
+}
+
+/* ================= 网格 DOM（只读投影） ================= */
+function buildGrid(container,data){
+  /* 保留网格内的坐标轴标签（重建只刷格子） */
+  var axisNodes=[];
+  var oldAxis=container.querySelectorAll('.axis');
+  for(var a=0;a<oldAxis.length;a++){ axisNodes.push(oldAxis[a]); oldAxis[a].remove(); }
+  container.innerHTML='';
+  container.style.gridTemplateColumns='repeat('+N+',1fr)';
+  for(var r=0;r<N;r++){
+    for(var c=0;c<N;c++){
+      var cell=document.createElement('span');
+      cell.className='cell'+(data[r][c]?' on':'');
+      cell.setAttribute('role','img');
+      cell.setAttribute('aria-label','第'+(r+1)+'行 第'+(c+1)+'列'+(data[r][c]?' 已填充':' 空白'));
+      container.appendChild(cell);
+    }
+  }
+  for(var i=0;i<axisNodes.length;i++) container.appendChild(axisNodes[i]);
+}
+
+/* ================= 应用变更：重建模型 + 投影 + 统计 + 提示 + 保存 ================= */
+function apply(){
+  if(voxelGroup) rebuildModel();
+  updateProjection();
+  rebuildGridsDOM();
+  updateStats();
+  updateFaceHl(); /* 投影重建后重应用面高亮 */
+  updateNotice();
+  save();
+}
+
+function countLit(data){
+  var n=0;
+  for(var r=0;r<N;r++) for(var c=0;c<N;c++) if(data[r][c]) n++;
+  return n;
+}
+function updateStats(){
+  $('stFront').textContent=countLit(front);
+  $('stSide').textContent=countLit(side);
+  $('stTop').textContent=countLit(topGrid);
+  $('stVox').textContent=voxelCount;
+  $('vVox').textContent=voxelCount;
+}
+
+/* ================= 示例模型（由体素函数投影生成，保证三视图一致） ================= */
+function inRange(v,lo,hi){return v>=lo&&v<=hi;}
+
+function houseVox(x,y,z){
+  /* 基座与墙体：x∈[2,7] z∈[2,7] y∈[0,4]，正面 z=2 开 门洞 */
+  if(inRange(x,2,7)&&inRange(z,2,7)&&inRange(y,0,4)){
+    if(z===2&&inRange(x,4,5)&&inRange(y,0,2)) return false;
+    return true;
+  }
+  /* 屋顶：y5→宽5 y6→宽3 y7→宽1（中心 x=z=5） */
+  if(inRange(y,5,7)&&inRange(x,2,8)&&inRange(z,2,8)){
+    var w=[5,3,1][y-5], lo=5-Math.floor(w/2), hi=5+Math.floor(w/2);
+    if(inRange(x,lo,hi)&&inRange(z,lo,hi)) return true;
+  }
+  /* 烟囱 */
+  if(x===7&&z===8&&inRange(y,5,6)) return true;
+  return false;
+}
+
+function rocketVox(x,y,z){
+  /* 尾翼：y0 十字形 */
+  if(y===0&&((inRange(x,2,6)&&inRange(z,3,5))||(inRange(x,3,5)&&inRange(z,2,6)))) return true;
+  /* 主体：y1..6 三列 */
+  if(inRange(x,3,5)&&inRange(z,3,5)&&inRange(y,1,6)) return true;
+  /* 头部：y7 三列 → y8 单点 */
+  if(y===7&&inRange(x,3,5)&&inRange(z,3,5)) return true;
+  if(y===8&&x===4&&z===4) return true;
+  return false;
+}
+
+function loadExample(kind){
+  var vox = kind==='house'?houseVox:rocketVox;
+  voxelSet=[];
+  for(var x=0;x<N;x++){
+    for(var y=0;y<N;y++){
+      for(var z=0;z<N;z++){
+        if(vox(x,y,z)) voxelSet.push([x,y,z]);
+      }
+    }
+  }
+  apply();
+}
+
+function clearAll(){
+  voxelSet=[];
+  apply();
+}
+
+function setSize(n){
+  N=n;
+  voxelSet=[];
+  if(scene){
+    controls.minDistance=N*0.9; controls.maxDistance=N*20;
+    updateSceneExtras();
+    flyToView('iso');
+  }
+  apply();
+}
+
+function rebuildGridsDOM(){
+  buildGrid($('gridFront'),front);
+  buildGrid($('gridSide'),side);
+  buildGrid($('gridTop'),topGrid);
+}
+
+/* ================= 右侧 3D 自由建模：直接增删体素，左侧三视图实时投影 ================= */
+function inBounds(x,y,z){return x>=0&&x<N&&y>=0&&y<N&&z>=0&&z<N;}
+function voxelKey(x,y,z){return x+','+y+','+z;}
+function hasVoxel(x,y,z){
+  for(var i=0;i<voxelSet.length;i++){
+    if(voxelSet[i][0]===x&&voxelSet[i][1]===y&&voxelSet[i][2]===z) return true;
+  }
+  return false;
+}
+/* 右侧拖入/移动方块 → 加入体素集合 → 重建模型并刷新三视图投影 */
+function addVoxelFromScene(x,y,z){
+  if(!inBounds(x,y,z)||hasVoxel(x,y,z)) return;
+  voxelSet.push([x,y,z]);
+  apply();
+}
+/* 右侧删除方块 → 从体素集合移除 → 重建模型并刷新三视图投影 */
+function removeVoxelFromScene(x,y,z){
+  for(var i=0;i<voxelSet.length;i++){
+    var v=voxelSet[i];
+    if(v[0]===x&&v[1]===y&&v[2]===z){ voxelSet.splice(i,1); break; }
+  }
+  apply();
+}
+
+/* ================= 本地保存：存权威体素集合与尺寸、颜色，刷新后自动恢复 ================= */
+function save(){
+  try{ localStorage.setItem(LS_KEY,JSON.stringify({N:N,voxels:voxelSet,color:color})); }
+  catch(e){}
+}
+function restore(){
+  try{
+    var d=JSON.parse(localStorage.getItem(LS_KEY));
+    if(!d) return;
+    if(SIZE_OPTIONS.indexOf(d.N)>-1) N=d.N;
+    if(Array.isArray(d.voxels)){
+      voxelSet=d.voxels.filter(function(v){return Array.isArray(v)&&v.length===3;})
+        .map(function(v){return [Number(v[0]),Number(v[1]),Number(v[2])];});
+    }
+    if(typeof d.color==='number'&&d.color) color=d.color;
+  }catch(e){}
+}
+
+/* ================= Three.js 场景 ================= */
+function initThree(){
+  var viewport=$('viewport');
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x121826);
+  scene.fog=new THREE.Fog(0x121826,N*7,N*26);
+
+  renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  renderer.outputEncoding=THREE.sRGBEncoding;
+
+  camera=new THREE.PerspectiveCamera(40,viewport.clientWidth/viewport.clientHeight,0.1,1000);
+  camera.position.set(N*2.1+N/2,N*2.1+N/2,N*2.1+N/2);
+
+  controls=new THREE.OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true;
+  controls.dampingFactor=0.08;
+  controls.minDistance=N*0.9;
+  controls.maxDistance=N*20;
+  controls.minPolarAngle=0.05;
+  controls.maxPolarAngle=Math.PI-0.05;
+  controls.target.set(N/2,N/2,N/2);
+  controls.update();
+
+  /* 光照：主光定形体 + 半球天空补光 + 冷暖两盏填充/轮廓 */
+  scene.add(new THREE.HemisphereLight(0xf4f7ff,0x202a3c,0.9));
+  var key=new THREE.DirectionalLight(0xffffff,1.1);
+  key.position.set(N*1.4,N*2.2,N*1.6);
+  scene.add(key);
+  var fill=new THREE.DirectionalLight(0x9db8ff,0.35);
+  fill.position.set(-N*1.6,N*0.4,-N*1.3);
+  scene.add(fill);
+  var rim=new THREE.DirectionalLight(0xffffff,0.22);
+  rim.position.set(0,N*0.5,-N*1.8);
+  scene.add(rim);
+
+  /* 地面网格 */
+  gridHelper=new THREE.GridHelper(N,N,0x46577a,0x2a3852);
+  gridHelper.position.set(N/2,0,N/2);
+  gridHelper.material.transparent=true;
+  gridHelper.material.opacity=0.85;
+  scene.add(gridHelper);
+
+  /* 坐标轴（红X 绿Y 蓝Z）+ 轴端文字标签 */
+  axesGroup=new THREE.Group();
+  var dirs=[['X',1,0,0,0xff5d5d],['Y',0,1,0,0x39d98a],['Z',0,0,1,0x4da3ff]];
+  axisLabels=[];
+  dirs.forEach(function(a){
+    var dx=a[1],dy=a[2],dz=a[3];
+    var pts=[new THREE.Vector3(0,0,0),new THREE.Vector3(dx*N,dy*N,dz*N)];
+    var line=new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({color:a[4],transparent:true,opacity:0.8})
+    );
+    axesGroup.add(line);
+    var tip=new THREE.Vector3(dx*(N+0.2),dy*(N+0.2),dz*(N+0.2));
+    var cone=new THREE.Mesh(
+      new THREE.ConeGeometry(0.09,0.32,12),
+      new THREE.MeshBasicMaterial({color:a[4]})
+    );
+    cone.position.copy(tip);
+    if(dx) cone.rotation.z=-Math.PI/2;
+    else if(dz) cone.rotation.x=Math.PI/2;
+    axesGroup.add(cone);
+    var lb=makeAxisLabel(a[0],a[4]);
+    lb.position.set(dx*(N+0.9),dy*(N+0.9),dz*(N+0.9));
+    axesGroup.add(lb);
+    axisLabels.push(lb);
+  });
+  scene.add(axesGroup);
+
+  /* 体素组与材质 */
+  voxelGroup=new THREE.Group();
+  scene.add(voxelGroup);
+  bodyMat=new THREE.MeshStandardMaterial({color:color,roughness:0.42,metalness:0,flatShading:true});
+  /* 贴合后的明显轮廓线：白色高对比细条 mesh，悬浮于体素缝隙正中，任何视角清晰可见 */
+  edgeMat=new THREE.MeshBasicMaterial({color:0xf4f9ff});
+  boxGeo=new THREE.BoxGeometry(0.94,0.94,0.94); /* 体素 0.94：视觉贴合，留微缝供轮廓线悬浮 */
+
+  /* 底部方块库 / 垃圾桶 / 地面吸附平面 / 预览与高亮 */
+  buildSceneExtras();
+  bindDrag();
+
+  /* 用户拖动时打断飞行、取消视图按钮高亮（面高亮保持稳定，不随视角清除） */
+  controls.addEventListener('start',function(){
+    if(flightId){cancelAnimationFrame(flightId);flightId=0;}
+    highlightView(null);
+    hoverLock=true;
+  });
+  controls.addEventListener('end',function(){
+    hoverLock=false;
+    renderer.domElement.style.cursor='';
+    showHighlight(null);
+  });
+
+  resize();
+  new ResizeObserver(resize).observe(viewport);
+
+  function tick(){
+    requestAnimationFrame(tick);
+    controls.update();
+    renderer.render(scene,camera);
+  }
+  tick();
+
+  $('vLoading').classList.add('hidden');
+  window.__sceneReady=true;
+}
+
+/* ================= 右侧 3D 自由建模：方块库 / 垃圾桶 / 拖拽交互 ================= */
+var groundPlane=null, palInst=null, palMat=null, trashGroup=null;
+var tray=null, trayLine=null, buildTools=[];
+var preview=null, previewMat=null, highlight=null;
+var raycaster=null, ndc=null;
+var drag=null; /* {mode:'place'|'move', key:[x,y,z]} */
+var hoverLock=false; /* OrbitControls 拖动期间抑制悬停提示 */
+var axesGroup=null, axisLabels=[]; /* 坐标轴组与轴端文字标签 */
+var faceHls=[]; /* 已激活的面高亮方向集合（可多方向叠加，再次点击对应方向才移除） */
+var facePlates={};      /* 方向 → InstancedMesh：该方向全部体素外表面的色片（点击面后右侧模型同步染色） */
+var facePlateGeo=null;
+var facePlateMats=null; /* 方向 → MeshBasicMaterial（面色） */
+
+/* 面方向 → 对应视图 + 高亮色：上/下→顶视图，前/后→正视图，右/左→侧视图 */
+var FACE_MAP={
+  '+y':{view:'top',  color:0xff5d5d, name:'上表面'},
+  '-y':{view:'top',  color:0xff9f43, name:'下表面'},
+  '+z':{view:'front',color:0x4da3ff, name:'前表面'},
+  '-z':{view:'front',color:0x2dd4bf, name:'后表面'},
+  '+x':{view:'side', color:0xb78bff, name:'右表面'},
+  '-x':{view:'side', color:0xff7eb3, name:'左表面'}
+};
+
+function buildSceneExtras(){
+  raycaster=new THREE.Raycaster();
+  ndc=new THREE.Vector2();
+  /* 地面吸附平面：不可见但参与射线检测，用于网格吸附 */
+  groundPlane=new THREE.Mesh(
+    new THREE.PlaneGeometry(N,N),
+    new THREE.MeshBasicMaterial({visible:false})
+  );
+  groundPlane.rotation.x=-Math.PI/2;
+  groundPlane.position.set(N/2,0,N/2);
+  scene.add(groundPlane);
+
+  /* 方块库托盘与方块（底部一排，取之不尽的拖拽源） */
+  tray=new THREE.Mesh(
+    new THREE.BoxGeometry(N*0.82,0.14,0.95),
+    new THREE.MeshStandardMaterial({color:0x1b2536,roughness:0.75})
+  );
+  tray.position.set(N/2,0.07,-1.35);
+  scene.add(tray);
+  trayLine=new THREE.Mesh(
+    new THREE.BoxGeometry(N*0.82,0.02,0.95),
+    new THREE.MeshBasicMaterial({color:0x33415c})
+  );
+  trayLine.position.set(N/2,0.15,-1.35);
+  scene.add(trayLine);
+
+  palMat=new THREE.MeshStandardMaterial({color:color,roughness:0.42,flatShading:true});
+  palInst=new THREE.InstancedMesh(new THREE.BoxGeometry(0.72,0.72,0.72),palMat,6);
+  var pm=new THREE.Matrix4();
+  for(var i=0;i<6;i++){
+    pm.setPosition(N/2-2.5+i,0.64,-1.35);
+    palInst.setMatrixAt(i,pm);
+  }
+  palInst.instanceMatrix.needsUpdate=true;
+  scene.add(palInst);
+
+  /* 垃圾桶模型：桶身 + 桶口环 + 底座 */
+  trashGroup=new THREE.Group();
+  var tBody=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4,0.3,0.85,20),
+    new THREE.MeshStandardMaterial({color:0xd05656,roughness:0.5})
+  );
+  tBody.position.y=0.43;
+  var tRim=new THREE.Mesh(
+    new THREE.TorusGeometry(0.4,0.06,10,24),
+    new THREE.MeshStandardMaterial({color:0x2a3444,roughness:0.6})
+  );
+  tRim.rotation.x=Math.PI/2;
+  tRim.position.y=0.87;
+  var tBase=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5,0.5,0.06,20),
+    new THREE.MeshStandardMaterial({color:0x232d3e,roughness:0.7})
+  );
+  tBase.position.y=0.03;
+  trashGroup.add(tBody,tRim,tBase);
+  trashGroup.position.set(N/2+3.9,0,-1.35);
+  scene.add(trashGroup);
+
+  /* 3D 文字标签（Sprite） */
+  buildTools.push(tray,trayLine,palInst,trashGroup);
+  var lb1=makeLabel('方块库 · 拖入网格建模',N/2,1.15,-1.35,3.4);
+  var lb2=makeLabel('垃圾桶 · 删除',N/2+3.9,1.25,-1.35,2.4);
+  buildTools.push(lb1,lb2);
+  scene.add(lb1,lb2);
+}
+
+/* 网格尺寸变更后：重建地面平面与建模工具的位置/尺寸 */
+function updateSceneExtras(){
+  if(!groundPlane) return;
+  groundPlane.geometry.dispose();
+  groundPlane.geometry=new THREE.PlaneGeometry(N,N);
+  groundPlane.position.set(N/2,0,N/2);
+  /* 坐标轴随网格尺寸更新长度与轴端标签位置 */
+  if(axesGroup){
+    var children=axesGroup.children, li=0;
+    var dirs=[[1,0,0],[0,1,0],[0,0,1]];
+    for(var k=0;k<children.length;k++){
+      var ch=children[k];
+      if(ch.isLine){
+        ch.geometry.dispose();
+        ch.geometry=new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0,0,0),
+          new THREE.Vector3(dirs[li][0]*N,dirs[li][1]*N,dirs[li][2]*N)
+        ]);
+        li++;
+      } else if(ch.isMesh&&!ch.isSprite){
+        ch.position.set(dirs[li-1][0]*(N+0.2),dirs[li-1][1]*(N+0.2),dirs[li-1][2]*(N+0.2));
+      } else if(ch.isSprite){
+        var lb=ch;
+        lb.position.set(dirs[li-1][0]*(N+0.9),dirs[li-1][1]*(N+0.9),dirs[li-1][2]*(N+0.9));
+      }
+    }
+  }
+  if(tray){
+    tray.geometry.dispose();
+    tray.geometry=new THREE.BoxGeometry(N*0.82,0.14,0.95);
+    tray.position.set(N/2,0.07,-1.35);
+    trayLine.geometry.dispose();
+    trayLine.geometry=new THREE.BoxGeometry(N*0.82,0.02,0.95);
+    trayLine.position.set(N/2,0.15,-1.35);
+  }
+  if(palInst){
+    var pm=new THREE.Matrix4();
+    for(var i=0;i<6;i++){
+      pm.setPosition(N/2-2.5+i,0.64,-1.35);
+      palInst.setMatrixAt(i,pm);
+    }
+    palInst.instanceMatrix.needsUpdate=true;
+  }
+  if(trashGroup) trashGroup.position.set(N/2+3.9,0,-1.35);
+}
+
+/* 非等轴测视角时隐藏底部建模工具，避免遮挡模型 */
+function showBuildTools(on){
+  for(var i=0;i<buildTools.length;i++) if(buildTools[i]) buildTools[i].visible=on;
+}
+
+function makeLabel(text,x,y,z,scale){
+  var c=document.createElement('canvas');
+  c.width=512;c.height=96;
+  var ctx=c.getContext('2d');
+  ctx.fillStyle='rgba(13,19,30,0.85)';
+  var r=16;
+  ctx.beginPath();
+  ctx.moveTo(r,0);ctx.lineTo(c.width-r,0);ctx.quadraticCurveTo(c.width,0,c.width,r);
+  ctx.lineTo(c.width,c.height-r);ctx.quadraticCurveTo(c.width,c.height,c.width-r,c.height);
+  ctx.lineTo(r,c.height);ctx.quadraticCurveTo(0,c.height,0,c.height-r);
+  ctx.lineTo(0,r);ctx.quadraticCurveTo(0,0,r,0);
+  ctx.fill();
+  ctx.font='bold 42px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='#e6edf7';
+  ctx.fillText(text,c.width/2,c.height/2);
+  var tex=new THREE.CanvasTexture(c);
+  tex.needsUpdate=true;
+  var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.position.set(x,y,z);
+  sp.scale.set(scale,scale*0.1875,1);
+  return sp;
+}
+
+/* 坐标轴端文字标签：透明底 + 轴色大字 */
+function makeAxisLabel(text,colorHex){
+  var c=document.createElement('canvas');
+  c.width=256;c.height=256;
+  var ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.font='bold 180px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor='rgba(10,16,28,0.85)';
+  ctx.shadowBlur=14;
+  ctx.fillStyle='#'+colorHex.toString(16).padStart(6,'0');
+  ctx.fillText(text,128,138);
+  var tex=new THREE.CanvasTexture(c);
+  tex.needsUpdate=true;
+  var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.scale.set(1.15,1.15,1);
+  return sp;
+}
+
+/* 面高亮：点击模型某方块的一个面后，左侧对应视图全部填充格染成该面颜色，
+   右侧模型该方向的所有外表面同步染色。多个方向可同时激活（点击其他面不消失），
+   再次点击对应方向的面才移除该方向颜色 */
+function updateFaceHl(){
+  /* 右侧模型面片：激活方向显示色片，其余隐藏 */
+  for(var k in facePlates){ if(facePlates[k]) facePlates[k].visible=(faceHls.indexOf(k)>-1); }
+  document.querySelectorAll('#panel .cell.hl').forEach(function(c){
+    c.classList.remove('hl'); c.style.background='';
+  });
+  if(!faceHls.length) return;
+  /* 每个视图取最近激活的方向颜色（同视图两个方向同时激活时以最新点击为准） */
+  var perView={};
+  for(var i=0;i<faceHls.length;i++){
+    var m=FACE_MAP[faceHls[i]];
+    if(m) perView[m.view]=faceHls[i];
+  }
+  for(var view in perView){
+    var m2=FACE_MAP[perView[view]];
+    var gridId=view==='top'?'gridTop':(view==='front'?'gridFront':'gridSide');
+    var grid=$(gridId); if(!grid) continue;
+    var col='#'+m2.color.toString(16).padStart(6,'0');
+    for(var j=0;j<grid.children.length;j++){
+      var cell=grid.children[j];
+      if(cell.classList.contains('on')){
+        cell.classList.add('hl');
+        cell.style.background=col;
+      }
+    }
+  }
+}
+/* 射线命中的法线方向 → 面方向键（+x/-x/+y/-y/+z/-z） */
+function dirOfNormal(n){
+  if(n.y>0.5) return '+y';
+  if(n.y<-0.5) return '-y';
+  if(n.z>0.5) return '+z';
+  if(n.z<-0.5) return '-z';
+  if(n.x>0.5) return '+x';
+  if(n.x<-0.5) return '-x';
+  return null;
+}
+
+/* 面片朝向与偏移：PlaneGeometry 默认法向 +Z（THREE 加载后懒初始化） */
+var PLATE_ROT=null, PLATE_OFF=null;
+/* 重建面片：每个方向一张 InstancedMesh，覆盖全部体素该方向的外表面（0.9 略小于 0.94 体素面，保留轮廓缝隙） */
+function rebuildFacePlates(){
+  var keys=['+x','-x','+y','-y','+z','-z'];
+  for(var k in facePlates){ if(facePlates[k]) voxelGroup.remove(facePlates[k]); }
+  facePlates={};
+  if(!voxelSet.length) return;
+  if(!facePlateGeo) facePlateGeo=new THREE.PlaneGeometry(0.9,0.9);
+  if(!facePlateMats){
+    facePlateMats={};
+    for(var i=0;i<keys.length;i++){
+      facePlateMats[keys[i]]=new THREE.MeshBasicMaterial({color:FACE_MAP[keys[i]].color});
+    }
+  }
+  if(!PLATE_ROT){
+    PLATE_ROT={
+      '+x':new THREE.Matrix4().makeRotationY(Math.PI/2),
+      '-x':new THREE.Matrix4().makeRotationY(-Math.PI/2),
+      '+y':new THREE.Matrix4().makeRotationX(-Math.PI/2),
+      '-y':new THREE.Matrix4().makeRotationX(Math.PI/2),
+      '+z':new THREE.Matrix4().makeRotationY(0),
+      '-z':new THREE.Matrix4().makeRotationY(Math.PI)
+    };
+    PLATE_OFF={
+      '+x':[0.472,0,0],'-x':[-0.472,0,0],
+      '+y':[0,0.472,0],'-y':[0,-0.472,0],
+      '+z':[0,0,0.472],'-z':[0,0,-0.472]
+    };
+  }
+  var m4=new THREE.Matrix4();
+  for(var d=0;d<keys.length;d++){
+    var dir=keys[d];
+    var im=new THREE.InstancedMesh(facePlateGeo,facePlateMats[dir],voxelSet.length);
+    im.visible=(faceHls.indexOf(dir)>-1);
+    var rot=PLATE_ROT[dir], off=PLATE_OFF[dir];
+    for(var v=0;v<voxelSet.length;v++){
+      var p=voxelSet[v];
+      m4.makeTranslation(p[0]+0.5+off[0],p[1]+0.5+off[1],p[2]+0.5+off[2]);
+      m4.multiply(rot);
+      im.setMatrixAt(v,m4);
+    }
+    im.instanceMatrix.needsUpdate=true;
+    voxelGroup.add(im);
+    facePlates[dir]=im;
+  }
+}
+
+/* 射线拾取：命中体素 / 方块库 / 垃圾桶 / 地面（隐藏对象不参与） */
+function pick(){
+  raycaster.setFromCamera(ndc,camera);
+  var targets=[voxelInst,groundPlane,palInst,trashGroup].filter(function(o){return o&&o.visible;});
+  return raycaster.intersectObjects(targets,true);
+}
+function isTrashHit(h){
+  if(!trashGroup) return false;
+  var o=h.object;
+  while(o){ if(o===trashGroup) return true; o=o.parent; }
+  return false;
+}
+function sceneNdc(e){
+  var r=renderer.domElement.getBoundingClientRect();
+  ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+}
+function samePos(a,b){return a&&b&&a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2];}
+
+/* 半透明预览方块 */
+function ensurePreview(){
+  if(preview) return;
+  previewMat=new THREE.MeshBasicMaterial({color:0x4ade80,transparent:true,opacity:0.55,depthWrite:false});
+  preview=new THREE.Mesh(boxGeo.clone(),previewMat);
+  scene.add(preview);
+}
+/* 悬停/点击高亮框（可指定颜色与透明度） */
+function showHighlight(pos,size,colorHex,opacity){
+  if(!highlight){
+    highlight=new THREE.Mesh(
+      new THREE.BoxGeometry(1.02,1.02,1.02),
+      new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.16,depthWrite:false})
+    );
+    scene.add(highlight);
+  }
+  if(!pos){highlight.visible=false;return;}
+  highlight.material.color.setHex(colorHex||0xffffff);
+  highlight.material.opacity=(opacity===undefined?0.16:opacity);
+  var s=size||1;
+  highlight.scale.set(s,s,s);
+  highlight.position.set(pos[0]+0.5,pos[1]+0.5,pos[2]+0.5);
+  highlight.visible=true;
+}
+
+function statusNotice(msg){
+  var el=$('vNotice');
+  if(!msg){el.className='v-notice';return;}
+  el.className='v-notice show';
+  el.textContent=msg;
+}
+
+var VIEW_CN={top:'顶视图',front:'正视图',side:'侧视图'};
+/* 点击方块的面 → 对应视图高亮 + 右侧模型该方向外表面染色；
+   点击其他方向的面时已有颜色保留（多方向叠加），再次点击对应方向的面才移除该方向颜色 */
+function handleFaceClick(e){
+  sceneNdc(e);
+  var hits=pick();
+  var h=null;
+  for(var i=0;i<hits.length;i++){
+    if(hits[i].object===groundPlane) continue;
+    h=hits[i];break;
+  }
+  if(h&&h.object===voxelInst&&h.face){
+    var dir=dirOfNormal(h.face.normal);
+    var m=FACE_MAP[dir];
+    var v=voxelSet[h.instanceId];
+    if(!m){ showHighlight(null); return; }
+    var idx=faceHls.indexOf(dir);
+    if(idx>-1) faceHls.splice(idx,1); else faceHls.push(dir);
+    updateFaceHl();
+    if(faceHls.length){
+      showHighlight(v,1.02,m.color,0.32);
+      statusNotice('「'+m.name+'」已高亮：左侧对应视图与右侧模型该方向同步染色；点击其他方向的面颜色保留，再次点击'+m.name+'可移除');
+    } else {
+      showHighlight(null);
+      statusNotice('已全部恢复原色：点击方块的面可重新高亮该方向');
+    }
+  } else {
+    /* 点击空白：保持现有高亮（只通过再次点击对应面切换） */
+    showHighlight(null);
+    statusNotice(null);
+  }
+}
+
+/* 拖拽放置候选：命中体素 → 吸附其表面相邻格；命中地面 → 吸附网格；拖到垃圾桶 → 删除指示 */
+function updateDrag(e){
+  sceneNdc(e);
+  var hits=pick();
+  var best=null, th=null;
+  for(var i=0;i<hits.length;i++){
+    var h=hits[i];
+    if(isTrashHit(h)){ if(!th) th=h; continue; }
+    if(h.object===palInst) continue;
+    if(h.object===voxelInst&&drag.mode==='move'&&drag.key&&samePos(drag.key,voxelSet[h.instanceId])) continue; /* 忽略自己 */
+    if(!best||h.distance<best.distance) best=h;
+  }
+  if(th&&drag.mode==='move'){
+    /* 拖到垃圾桶：预览移到桶口上方，红色提示删除 */
+    ensurePreview();
+    preview.position.set(N/2+3.9,1.5,-1.35);
+    preview.visible=true;
+    previewMat.color.setHex(0xff6b6b);
+    drag.candidate=null; drag.valid=false; drag.toTrash=true;
+    statusNotice('松开即删除该方块');
+    return;
+  }
+  drag.toTrash=false;
+  if(best&&best.object===groundPlane){
+    var gx=Math.round(best.point.x), gz=Math.round(best.point.z);
+    if(drag.mode==='move'&&drag.key&&gx===drag.key[0]&&gz===drag.key[2]){
+      setPreviewPos(drag.key[0],drag.key[1],drag.key[2]); /* 原地保持 */
+    } else {
+      setPreviewPos(gx,0,gz);
+    }
+  } else if(best&&best.object===voxelInst){
+    var iv=voxelSet[best.instanceId];
+    var n=best.face.normal;
+    var nx=iv[0]+(n.x>0.5?1:n.x<-0.5?-1:0);
+    var ny=iv[1]+(n.y>0.5?1:n.y<-0.5?-1:0);
+    var nz=iv[2]+(n.z>0.5?1:n.z<-0.5?-1:0);
+    setPreviewPos(nx,ny,nz);
+  } else {
+    if(preview) preview.visible=false;
+  }
+}
+
+function setPreviewPos(x,y,z){
+  var ok=inBounds(x,y,z)&&!hasVoxel(x,y,z);
+  if(drag.mode==='move'&&drag.key&&samePos(drag.key,[x,y,z])) ok=true;
+  ensurePreview();
+  preview.position.set(x+0.5,y+0.5,z+0.5);
+  preview.visible=true;
+  previewMat.color.setHex(ok?0x4ade80:0xff6b6b);
+  drag.candidate=[x,y,z];
+  drag.valid=ok;
+  statusNotice(ok?('放置到 ('+x+', '+y+', '+z+')'):('该位置不可放置'));
+}
+
+function bindDrag(){
+  var canvas=renderer.domElement;
+
+  canvas.addEventListener('pointerdown',function(e){
+    if(e.button!==0||drag) return;
+    sceneNdc(e);
+    var hits=pick();
+    var h=null;
+    for(var i=0;i<hits.length;i++){
+      if(hits[i].object===groundPlane) continue;
+      h=hits[i];break;
+    }
+    if(!h||isTrashHit(h)) return; /* 空白或垃圾桶：交给 OrbitControls / 无操作 */
+    e.stopPropagation();
+    e.preventDefault();
+    try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+    drag={mode:null,key:null,valid:false,candidate:null,toTrash:false,startX:e.clientX,startY:e.clientY};
+    if(h.object===palInst){
+      drag.mode='place';
+    } else if(h.object===voxelInst){
+      drag.mode='move';
+      drag.key=[voxelSet[h.instanceId][0],voxelSet[h.instanceId][1],voxelSet[h.instanceId][2]];
+    } else {
+      drag=null;return;
+    }
+    controls.enabled=false;
+    canvas.style.cursor='grabbing';
+    showHighlight(null);
+    ensurePreview();
+    if(drag.key) preview.position.set(drag.key[0]+0.5,drag.key[1]+0.5,drag.key[2]+0.5);
+    preview.visible=true;
+    updateDrag(e);
+  },true);
+
+  canvas.addEventListener('pointermove',function(e){
+    if(drag){ updateDrag(e); return; }
+    if(hoverLock) return;
+    sceneNdc(e);
+    var hits=pick();
+    var h=null;
+    for(var i=0;i<hits.length;i++){
+      if(hits[i].object===groundPlane) continue;
+      h=hits[i];break;
+    }
+    if(h&&h.object===voxelInst){
+      canvas.style.cursor='grab';
+      var v=voxelSet[h.instanceId];
+      showHighlight(v);
+      statusNotice('方块 ('+v[0]+', '+v[1]+', '+v[2]+') · 拖动可移动、拖至垃圾桶删除；点击它的一个面可高亮对应视图投影');
+    } else if(h&&h.object===palInst){
+      canvas.style.cursor='grab';
+      var pm=new THREE.Matrix4();
+      palInst.getMatrixAt(h.instanceId,pm);
+      showHighlight([pm.elements[12]-0.5,pm.elements[13]-0.5,pm.elements[14]-0.5],0.72);
+      statusNotice('拖动此方块到网格上放置，可贴齐已有方块');
+    } else if(h&&isTrashHit(h)){
+      canvas.style.cursor='grab';
+      showHighlight([N/2+3.9,0.4,-1.35],0.9);
+      statusNotice('垃圾桶 · 将模型方块拖到这里删除');
+    } else {
+      canvas.style.cursor='';
+      showHighlight(null);
+      updateNotice(); /* 移开悬停目标后恢复持久提示 */
+    }
+  });
+
+  canvas.addEventListener('pointerup',function(e){
+    if(!drag) return;
+    e.stopPropagation();
+    e.preventDefault();
+    /* 位移很小视为"点击"：不得移动方块，只做面高亮联动（或点击空白取消高亮） */
+    var moved=Math.abs(e.clientX-drag.startX)+Math.abs(e.clientY-drag.startY);
+    if(moved<6){
+      handleFaceClick(e);
+      cleanupDrag();
+      return;
+    }
+    finishDrag();
+  },true);
+
+  canvas.addEventListener('pointercancel',function(){
+    cleanupDrag();
+  });
+}
+
+function finishDrag(){
+  var d=drag;
+  if(!d) return;
+  if(d.mode==='move'&&d.toTrash&&d.key){
+    removeVoxelFromScene(d.key[0],d.key[1],d.key[2]);
+    cleanupDrag();
+    return;
+  }
+  if(d.valid&&d.candidate){
+    var c=d.candidate;
+    if(d.mode==='place'){
+      addVoxelFromScene(c[0],c[1],c[2]);
+    } else if(d.mode==='move'&&d.key){
+      if(!samePos(d.key,c)){
+        removeVoxelFromScene(d.key[0],d.key[1],d.key[2]);
+        addVoxelFromScene(c[0],c[1],c[2]);
+      }
+    }
+  }
+  cleanupDrag();
+  updateNotice(); /* 恢复持久提示 */
+}
+
+function cleanupDrag(){
+  if(drag){drag=null;}
+  if(preview) preview.visible=false;
+  controls.enabled=true;
+  renderer.domElement.style.cursor='';
+  showHighlight(null);
+}
+
+function resize(){
+  var vp=$('viewport');
+  if(!renderer) return;
+  var w=vp.clientWidth,h=vp.clientHeight;
+  if(w<2||h<2) return;
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w,h,false);
+}
+
+/* ================= 体素重建（实例化体素 + 细条轮廓线） ================= */
+function rebuildModel(){
+  var voxels=voxelSet;
+  if(voxelInst){voxelGroup.remove(voxelInst);voxelInst=null;}
+  if(edgeInsts){for(var e=0;e<edgeInsts.length;e++){voxelGroup.remove(edgeInsts[e]);edgeInsts[e]=null;}}
+  edgeInsts=[];
+  if(voxels.length===0){voxelCount=0;rebuildFacePlates();return;}
+  voxelInst=new THREE.InstancedMesh(boxGeo,bodyMat,voxels.length);
+  var m4=new THREE.Matrix4();
+  for(var i=0;i<voxels.length;i++){
+    m4.setPosition(voxels[i][0]+0.5,voxels[i][1]+0.5,voxels[i][2]+0.5);
+    voxelInst.setMatrixAt(i,m4);
+  }
+  voxelInst.instanceMatrix.needsUpdate=true;
+  voxelGroup.add(voxelInst);
+  /* 轮廓线：每个体素 12 条边，用三个方向的细条 mesh（悬浮于 0.94 体素的缝隙正中）。
+     mesh 渲染稳定可靠，细条与体素面留 0.01 间隙，深度正常、任意视角清晰可见 */
+  var t=0.1;
+  var bars=[
+    new THREE.BoxGeometry(1,t,t),   /* X 向 4 条 */
+    new THREE.BoxGeometry(t,1,t),   /* Y 向 4 条 */
+    new THREE.BoxGeometry(t,t,1)    /* Z 向 4 条 */
+  ];
+  var showEdges=$('btnEdges').getAttribute('aria-pressed')==='true';
+  var ims=[];
+  for(var d=0;d<3;d++){
+    var im=new THREE.InstancedMesh(bars[d],edgeMat,voxels.length*4);
+    im.visible=showEdges;
+    voxelGroup.add(im);
+    ims.push(im);
+  }
+  var ci=[0,0,0];
+  for(var k=0;k<voxels.length;k++){
+    var cx=voxels[k][0]+0.5,cy=voxels[k][1]+0.5,cz=voxels[k][2]+0.5;
+    var sy,sz,sx;
+    for(sy=-0.5;sy<=0.5;sy+=1)for(sz=-0.5;sz<=0.5;sz+=1){m4.setPosition(cx,cy+sy,cz+sz);ims[0].setMatrixAt(ci[0]++,m4);}
+    for(sx=-0.5;sx<=0.5;sx+=1)for(sz=-0.5;sz<=0.5;sz+=1){m4.setPosition(cx+sx,cy,cz+sz);ims[1].setMatrixAt(ci[1]++,m4);}
+    for(sx=-0.5;sx<=0.5;sx+=1)for(sy=-0.5;sy<=0.5;sy+=1){m4.setPosition(cx+sx,cy+sy,cz);ims[2].setMatrixAt(ci[2]++,m4);}
+  }
+  for(var d2=0;d2<3;d2++) ims[d2].instanceMatrix.needsUpdate=true;
+  edgeInsts=ims;
+  voxelCount=voxels.length;
+  rebuildFacePlates();
+  centerOnModel(voxels);
+}
+
+/* 模型居中：模型包围盒中心明显偏离视线中心时，平滑平移镜头使模型居中（不改变视角方向） */
+function centerOnModel(voxels){
+  if(!controls||!voxels.length) return;
+  var minX=999,minY=999,minZ=999,maxX=-1,maxY=-1,maxZ=-1;
+  for(var i=0;i<voxels.length;i++){
+    var v=voxels[i];
+    if(v[0]<minX)minX=v[0]; if(v[0]>maxX)maxX=v[0];
+    if(v[1]<minY)minY=v[1]; if(v[1]>maxY)maxY=v[1];
+    if(v[2]<minZ)minZ=v[2]; if(v[2]>maxZ)maxZ=v[2];
+  }
+  var bc=new THREE.Vector3((minX+maxX)/2+0.5,(minY+maxY)/2+0.5,(minZ+maxZ)/2+0.5);
+  if(controls.target.distanceTo(bc)<N*0.35) return;
+  var delta=bc.clone().sub(controls.target);
+  animateCamera(camera.position.clone().add(delta),bc);
+}
+
+/* ================= 相机：预设视图 / 缩放 / 复位 ================= */
+var VIEWS={
+  iso:[1,1,1], front:[0,0,-1], back:[0,0,1],
+  left:[-1,0,0], right:[1,0,0], top:[0,1,0], bottom:[0,-1,0]
+};
+function flyToView(name){
+  if(!scene) return;
+  var d=VIEWS[name];
+  var c=N/2;
+  var dist = name==='iso' ? N*2.1 : N*3.3;
+  var target=new THREE.Vector3(c,c,c);
+  var pos=new THREE.Vector3(c+d[0]*dist,c+d[1]*dist,c+d[2]*dist);
+  animateCamera(pos,target);
+  currentView=name;
+  highlightView(name);
+  $('vViewName').textContent=viewNameOf(name);
+  showBuildTools(name==='iso');
+}
+function viewNameOf(name){
+  var map={iso:'等轴测',front:'前视图',back:'后视图',left:'左视图',right:'右视图',top:'顶视图',bottom:'底视图'};
+  return map[name]||name;
+}
+function animateCamera(pos,target){
+  if(flightId){cancelAnimationFrame(flightId);flightId=0;}
+  if(reduceMotion){camera.position.copy(pos);controls.target.copy(target);controls.update();return;}
+  var sp=camera.position.clone(),st=controls.target.clone();
+  var dur=650,t0=performance.now();
+  function step(now){
+    var k=Math.min(1,(now-t0)/dur);
+    k=1-Math.pow(1-k,3);
+    camera.position.lerpVectors(sp,pos,k);
+    controls.target.lerpVectors(st,target,k);
+    controls.update();
+    if(k<1) flightId=requestAnimationFrame(step);
+    else flightId=0;
+  }
+  flightId=requestAnimationFrame(step);
+}
+function highlightView(name){
+  document.querySelectorAll('#viewBtns .vbtn').forEach(function(b){
+    b.classList.toggle('active',b.dataset.view===name);
+  });
+}
+function zoomBy(f){
+  if(!camera) return;
+  var dir=camera.position.clone().sub(controls.target);
+  var len=THREE.MathUtils.clamp(dir.length()*f,N*0.9,N*20);
+  dir.setLength(len);
+  camera.position.copy(controls.target).add(dir);
+}
+
+/* ================= UI 绑定 ================= */
+function buildPalette(){
+  var el=$('palette');
+  PALETTE.forEach(function(p){
+    var b=document.createElement('button');
+    b.type='button';
+    b.className='swatch'+(p.hex===color?' active':'');
+    b.style.background='#'+p.hex.toString(16).padStart(6,'0');
+    b.title=p.name;
+    b.dataset.hex=p.hex;
+    b.addEventListener('click',function(){setColor(p.hex);});
+    el.appendChild(b);
+  });
+}
+function setColor(hex){
+  color=hex;
+  document.querySelectorAll('.swatch').forEach(function(s){
+    s.classList.toggle('active',+s.dataset.hex===hex);
+  });
+  if(bodyMat){
+    bodyMat.color.setHex(hex);
+  }
+  if(palMat) palMat.color.setHex(hex);
+  save();
+}
+
+function bindUI(){
+  var sizeSel=$('sizeSel');
+  sizeSel.addEventListener('change',function(){setSize(+this.value);});
+
+  $('btnClear').addEventListener('click',clearAll);
+  $('btnHouse').addEventListener('click',function(){loadExample('house');});
+  $('btnRocket').addEventListener('click',function(){loadExample('rocket');});
+
+  /* 收起 / 展开左侧编辑栏：收起后模型区全屏，再次点击箭头调出 */
+  var collapseBtn=$('collapseBtn');
+  collapseBtn.addEventListener('click',function(){
+    var panel=$('panel');
+    var collapsed=panel.classList.toggle('collapsed');
+    this.setAttribute('aria-label',collapsed?'展开编辑栏':'收起编辑栏');
+    this.setAttribute('aria-pressed',collapsed?'true':'false');
+    this.querySelector('.icon-left').style.display=collapsed?'none':'block';
+    this.querySelector('.icon-right').style.display=collapsed?'block':'none';
+    this.title=collapsed?'展开编辑栏':'收起编辑栏';
+    if(resize) resize(); /* 视口尺寸变化立即重算渲染器 */
+  });
+
+  $('viewBtns').addEventListener('click',function(e){
+    var b=e.target.closest('.vbtn');
+    if(b) flyToView(b.dataset.view);
+  });
+  $('btnZoomIn').addEventListener('click',function(){zoomBy(1/1.25);});
+  $('btnZoomOut').addEventListener('click',function(){zoomBy(1.25);});
+  $('btnReset').addEventListener('click',function(){flyToView('iso');});
+
+  var rotateBtn=$('btnRotate');
+  rotateBtn.addEventListener('click',function(){
+    if(!controls) return;
+    var on=this.getAttribute('aria-pressed')!=='true';
+    this.setAttribute('aria-pressed',on?'true':'false');
+    this.classList.toggle('active',on);
+    controls.autoRotate=on;
+  });
+  var gridBtn=$('btnGrid');
+  gridBtn.addEventListener('click',function(){
+    if(!gridHelper) return;
+    var on=this.getAttribute('aria-pressed')!=='true';
+    this.setAttribute('aria-pressed',on?'true':'false');
+    this.classList.toggle('active',on);
+    gridHelper.visible=on;
+  });
+  var edgeBtn=$('btnEdges');
+  edgeBtn.addEventListener('click',function(){
+    var on=this.getAttribute('aria-pressed')!=='true';
+    this.setAttribute('aria-pressed',on?'true':'false');
+    this.classList.toggle('active',on);
+    if(edgeInsts) for(var i=0;i<edgeInsts.length;i++) edgeInsts[i].visible=on;
+  });
+
+  document.querySelectorAll('#viewBtns .vbtn').forEach(function(b){b.classList.add('active-init');});
+  highlightView('iso');
+}
+
+/* ================= CDN 加载（jsDelivr 首选，cdnjs / npmmirror 备胎） ================= */
+function loadScript(srcs,cb){
+  if(!srcs.length){cb(false);return;}
+  var s=document.createElement('script');
+  s.src=srcs[0];
+  var done=false, timer=null;
+  function next(){
+    if(done) return;
+    done=true;
+    if(timer) clearTimeout(timer);
+    s.remove();
+    loadScript(srcs.slice(1),cb);
+  }
+  s.onload=function(){
+    if(done) return;
+    done=true;
+    if(timer) clearTimeout(timer);
+    cb(true);
+  };
+  s.onerror=function(){ next(); };
+  /* 镜像挂起 10s 无响应也切换下一个，避免 CDN 抖动导致白屏 */
+  timer=setTimeout(function(){ next(); },10000);
+  document.head.appendChild(s);
+}
+function fail(msg){
+  var box=$('vLoading');
+  box.classList.add('err');
+  var p=$('loadText');
+  p.textContent=msg;
+  if(!box.querySelector('.retry-btn')){
+    var retry=document.createElement('button');
+    retry.type='button';
+    retry.className='retry-btn';
+    retry.textContent='重试加载';
+    retry.addEventListener('click',function(){location.reload();});
+    box.appendChild(retry);
+  }
+}
+
+function startApp(){
+  initThree();
+  var m=location.search.match(/[?&]demo=(house|rocket)/);
+  if(m) loadExample(m[1]); else apply();
+}
+
+var sizeSel=$('sizeSel');
+restore();
+sizeSel.value=String(N);
+front=front.length?front:emptyGrid();
+side=side.length?side:emptyGrid();
+topGrid=topGrid.length?topGrid:emptyGrid();
+buildPalette();
+rebuildGridsDOM();
+bindUI();
+
+loadScript([
+  'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+  'https://registry.npmmirror.com/three/0.128.0/files/build/three.min.js'
+],function(ok){
+  if(!ok||!window.THREE){fail('3D 引擎加载失败，请检查网络后点击下方按钮重试。');return;}
+  loadScript([
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js',
+    'https://registry.npmmirror.com/three/0.128.0/files/examples/js/controls/OrbitControls.js'
+  ],function(ok2){
+    if(!ok2||!window.THREE.OrbitControls){fail('3D 引擎加载失败，请检查网络后点击下方按钮重试。');return;}
+    startApp();
+  });
+});
+})();
+</script>
+</body>
+</html>
